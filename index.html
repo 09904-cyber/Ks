@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>เกมรับของตกจากฟ้า - ควบคุมด้วยสัมผัส</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            touch-action: none; /* ป้องกันการซูมหรือสกรอลล์ขณะสัมผัสบนมือถือ */
+        }
+        body {
+            font-family: 'Kanit', sans-serif, Tahoma;
+            background: radial-gradient(circle, #1a1a2e, #16213e, #0f3460);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+        #game-container {
+            position: relative;
+            width: 400px;
+            height: 600px;
+            max-width: 100vw;
+            max-height: 100vh;
+            background: linear-gradient(to bottom, #0f0c29, #302b63, #24243e);
+            border: 4px solid #ff007f;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 0 30px rgba(255, 0, 127, 0.4);
+        }
+
+        /* ตารางคะแนน */
+        #scoreboard {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            right: 15px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 18px;
+            font-weight: bold;
+            color: #ffffff;
+            text-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+            z-index: 10;
+        }
+
+        /* ตะกร้ารับของ (ฐานรับ) */
+        #basket {
+            position: absolute;
+            bottom: 20px;
+            left: 165px;
+            width: 70px;
+            height: 32px;
+            background: linear-gradient(135deg, #ff9900, #ff5500);
+            border-radius: 0 0 16px 16px;
+            border: 2px solid #fff;
+            box-shadow: 0 0 15px #ff9900;
+            cursor: pointer;
+        }
+
+        /* ไอเทมผลไม้และระเบิด */
+        .item {
+            position: absolute;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 22px;
+            transition: transform 0.1s;
+        }
+
+        /* เอฟเฟกต์สีส่องแสงสำหรับผลไม้ */
+        .fruit-apple {
+            background: radial-gradient(circle, #ff4e50, #f9d423);
+            box-shadow: 0 0 15px #ff4e50, 0 0 30px #f9d423;
+        }
+        .fruit-dragon {
+            background: radial-gradient(circle, #ff007f, #7b2cbf);
+            box-shadow: 0 0 15px #ff007f, 0 0 30px #7b2cbf;
+        }
+        .fruit-kiwi {
+            background: radial-gradient(circle, #11998e, #38ef7d);
+            box-shadow: 0 0 15px #38ef7d, 0 0 25px #11998e;
+        }
+        .fruit-mango {
+            background: radial-gradient(circle, #ffb347, #ffcc33);
+            box-shadow: 0 0 15px #ffb347, 0 0 25px #ffcc33;
+        }
+        .fruit-grape {
+            background: radial-gradient(circle, #8a2be2, #4b0082);
+            box-shadow: 0 0 15px #8a2be2, 0 0 25px #4b0082;
+        }
+        .bomb-item {
+            background: radial-gradient(circle, #ff0000, #400000);
+            box-shadow: 0 0 15px #ff0000;
+            animation: pulse 0.5s infinite alternate;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.9); }
+            100% { transform: scale(1.1); }
+        }
+
+        /* เอฟเฟกต์ประกายละอองเรืองแสง */
+        .particle {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            pointer-events: none;
+            animation: fadeOut 0.6s linear forwards;
+        }
+
+        @keyframes fadeOut {
+            0% {
+                opacity: 1;
+                transform: translate(0, 0) scale(1);
+            }
+            100% {
+                opacity: 0;
+                transform: translate(var(--dx), var(--dy)) scale(0.2);
+            }
+        }
+
+        /* หน้าจอซ้อน Overlay */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 12, 41, 0.85);
+            backdrop-filter: blur(5px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 20;
+        }
+        .overlay h1 {
+            font-size: 26px;
+            margin-bottom: 15px;
+            text-shadow: 0 0 10px #ff007f, 0 0 20px #ff007f;
+            text-align: center;
+        }
+        .overlay p {
+            font-size: 15px;
+            margin-bottom: 25px;
+            text-align: center;
+            line-height: 1.6;
+        }
+        .btn {
+            padding: 12px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            color: white;
+            background: linear-gradient(45deg, #ff007f, #7b2cbf);
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 0 15px #ff007f;
+            transition: 0.3s;
+        }
+        .btn:hover {
+            transform: scale(1.08);
+            box-shadow: 0 0 25px #ff007f;
+        }
+
+        /* เอฟเฟกต์สั่นเมื่อรับระเบิด */
+        .shake {
+            animation: shakeAnim 0.3s ease-in-out;
+        }
+        @keyframes shakeAnim {
+            0%, 100% { transform: translate(0, 0); }
+            20% { transform: translate(-8px, 5px); }
+            40% { transform: translate(8px, -5px); }
+            60% { transform: translate(-5px, 3px); }
+            80% { transform: translate(5px, -3px); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <!-- คะแนนและชีวิต -->
+        <div id="scoreboard">
+            <div>คะแนน: <span id="score">0</span></div>
+            <div>ชีวิต: <span id="lives">❤️❤️❤️</span></div>
+        </div>
+
+        <!-- ฐานรับผลไม้ -->
+        <div id="basket"></div>
+
+        <!-- หน้าเริ่มเกม -->
+        <div id="start-screen" class="overlay">
+            <h1>✨ เกมผลไม้เรืองแสง ✨</h1>
+            <p>ลาก <b>นิ้วมือ</b> หรือ <b>เมาส์</b> เพื่อเลื่อนฐานรับ<br>รับผลไม้เรืองแสงเพื่อทำคะแนน<br>ระวังระเบิดเรืองแสง 💣!</p>
+            <button class="btn" onclick="startGame()">เริ่มเล่นเกม</button>
+        </div>
+
+        <!-- หน้าจบเกม -->
+        <div id="game-over-screen" class="overlay" style="display: none;">
+            <h1>GAME OVER</h1>
+            <p>คะแนนที่คุณทำได้: <span id="final-score">0</span></p>
+            <button class="btn" onclick="startGame()">เล่นใหม่อีกครั้ง</button>
+        </div>
+    </div>
+
+    <script>
+        const container = document.getElementById('game-container');
+        const basket = document.getElementById('basket');
+        const scoreDisplay = document.getElementById('score');
+        const livesDisplay = document.getElementById('lives');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const finalScoreDisplay = document.getElementById('final-score');
+
+        let score = 0;
+        let lives = 3;
+        let gameActive = false;
+        const basketWidth = 70;
+        let basketX = 165;
+        let basketSpeed = 9;
+        let items = [];
+        let spawnTimer = null;
+        let gameLoopId = null;
+
+        // ระบบเสียง Web Audio API
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playCollectSound() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
+            
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+        }
+
+        function playExplosionSound() {
+            if (!audioCtx) return;
+            
+            const bufferSize = audioCtx.sampleRate * 0.4;
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = buffer;
+
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(800, audioCtx.currentTime);
+            filter.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.4);
+
+            const gain = audioCtx.createGain();
+            gain.gain.setValueAtTime(0.8, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+
+            noise.connect(filter);
+            filter.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            noise.start();
+            noise.stop(audioCtx.currentTime + 0.4);
+        }
+
+        function playGameOverSound() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 0.6);
+
+            gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.6);
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.6);
+        }
+
+        // ชนิดผลไม้
+        const fruitTypes = [
+            { emoji: '🍎', class: 'fruit-apple', color: '#ff4e50' },
+            { emoji: '🐲', class: 'fruit-dragon', color: '#ff007f' },
+            { emoji: '🥝', class: 'fruit-kiwi', color: '#38ef7d' },
+            { emoji: '🥭', class: 'fruit-mango', color: '#ffb347' },
+            { emoji: '🍇', class: 'fruit-grape', color: '#8a2be2' }
+        ];
+
+        // การควบคุมด้วยคีย์บอร์ด
+        let keys = {};
+        document.addEventListener('keydown', (e) => keys[e.key] = true);
+        document.addEventListener('keyup', (e) => keys[e.key] = false);
+
+        // ฟังก์ชันคำนวณตำแหน่ง X สำหรับเลื่อนตะกร้าตามพิกัด
+        function moveBasketTo(clientX) {
+            if (!gameActive) return;
+            const rect = container.getBoundingClientRect();
+            let relativeX = clientX - rect.left - (basketWidth / 2);
+            basketX = Math.max(0, Math.min(rect.width - basketWidth, relativeX));
+            basket.style.left = basketX + 'px';
+        }
+
+        // การควบคุมด้วยเมาส์ (Mouse Move)
+        container.addEventListener('mousemove', (e) => {
+            moveBasketTo(e.clientX);
+        });
+
+        // การควบคุมด้วยการสัมผัส/ลากนิ้วบนมือถือ (Touch Events)
+        container.addEventListener('touchstart', (e) => {
+            if (e.touches.length > 0) {
+                moveBasketTo(e.touches[0].clientX);
+            }
+        }, { passive: false });
+
+        container.addEventListener('touchmove', (e) => {
+            if (e.touches.length > 0) {
+                e.preventDefault(); // ป้องกันการสกรอลล์หน้าจอมือถือ
+                moveBasketTo(e.touches[0].clientX);
+            }
+        }, { passive: false });
+
+        function startGame() {
+            initAudio();
+
+            score = 0;
+            lives = 3;
+            items.forEach(item => item.element.remove());
+            items = [];
+            scoreDisplay.textContent = score;
+            updateLivesDisplay();
+
+            startScreen.style.display = 'none';
+            gameOverScreen.style.display = 'none';
+
+            gameActive = true;
+
+            clearInterval(spawnTimer);
+            spawnTimer = setInterval(spawnItem, 700);
+
+            cancelAnimationFrame(gameLoopId);
+            gameLoop();
+        }
+
+        function updateLivesDisplay() {
+            livesDisplay.textContent = '❤️'.repeat(lives);
+        }
+
+        function spawnItem() {
+            if (!gameActive) return;
+
+            const itemEl = document.createElement('div');
+            itemEl.classList.add('item');
+
+            const isBomb = Math.random() < 0.22;
+            const containerWidth = container.clientWidth || 400;
+            const xPos = Math.floor(Math.random() * (containerWidth - 36));
+            let color = '#fff';
+
+            if (isBomb) {
+                itemEl.textContent = '💣';
+                itemEl.classList.add('bomb-item');
+                itemEl.dataset.type = 'bomb';
+                color = '#ff0000';
+            } else {
+                const randomFruit = fruitTypes[Math.floor(Math.random() * fruitTypes.length)];
+                itemEl.textContent = randomFruit.emoji;
+                itemEl.classList.add(randomFruit.class);
+                itemEl.dataset.type = 'fruit';
+                color = randomFruit.color;
+            }
+
+            itemEl.style.left = xPos + 'px';
+            itemEl.style.top = '0px';
+            container.appendChild(itemEl);
+
+            items.push({
+                element: itemEl,
+                x: xPos,
+                y: 0,
+                speed: 2.5 + Math.random() * 2.5 + (score * 0.05),
+                type: itemEl.dataset.type,
+                color: color
+            });
+        }
+
+        function createExplosion(x, y, color) {
+            for (let i = 0; i < 12; i++) {
+                const particle = document.createElement('div');
+                particle.classList.add('particle');
+                particle.style.backgroundColor = color;
+                particle.style.boxShadow = `0 0 8px ${color}`;
+                particle.style.left = x + 'px';
+                particle.style.top = y + 'px';
+
+                const dx = (Math.random() - 0.5) * 80 + 'px';
+                const dy = (Math.random() - 0.8) * 80 + 'px';
+                particle.style.setProperty('--dx', dx);
+                particle.style.setProperty('--dy', dy);
+
+                container.appendChild(particle);
+
+                setTimeout(() => particle.remove(), 600);
+            }
+        }
+
+        function triggerShake() {
+            container.classList.add('shake');
+            setTimeout(() => container.classList.remove('shake'), 300);
+        }
+
+        function gameLoop() {
+            if (!gameActive) return;
+
+            const maxBasketX = container.clientWidth - basketWidth;
+
+            // ควบคุมด้วยปุ่มกด
+            if (keys['ArrowLeft'] || keys['a']) {
+                basketX = Math.max(0, basketX - basketSpeed);
+                basket.style.left = basketX + 'px';
+            }
+            if (keys['ArrowRight'] || keys['d']) {
+                basketX = Math.min(maxBasketX, basketX + basketSpeed);
+                basket.style.left = basketX + 'px';
+            }
+
+            for (let i = items.length - 1; i >= 0; i--) {
+                let item = items[i];
+                item.y += item.speed;
+                item.element.style.top = item.y + 'px';
+
+                // ตรวจชนตะกร้า
+                if (item.y >= 540 && item.y <= 570 && item.x + 36 >= basketX && item.x <= basketX + basketWidth) {
+                    createExplosion(item.x + 18, item.y + 18, item.color);
+
+                    if (item.type === 'fruit') {
+                        playCollectSound();
+                        score += 10;
+                        scoreDisplay.textContent = score;
+                    } else if (item.type === 'bomb') {
+                        playExplosionSound();
+                        triggerShake();
+                        lives--;
+                        updateLivesDisplay();
+                        if (lives <= 0) endGame();
+                    }
+
+                    item.element.remove();
+                    items.splice(i, 1);
+                    continue;
+                }
+
+                // ตกถึงพื้น
+                if (item.y > 600) {
+                    if (item.type === 'fruit') {
+                        lives--;
+                        updateLivesDisplay();
+                        if (lives <= 0) endGame();
+                    }
+                    item.element.remove();
+                    items.splice(i, 1);
+                }
+            }
+
+            if (gameActive) {
+                gameLoopId = requestAnimationFrame(gameLoop);
+            }
+        }
+
+        function endGame() {
+            gameActive = false;
+            clearInterval(spawnTimer);
+            playGameOverSound();
+            finalScoreDisplay.textContent = score;
+            gameOverScreen.style.display = 'flex';
+        }
+    </script>
+</body>
+</html>
